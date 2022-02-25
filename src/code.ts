@@ -340,7 +340,7 @@ async function updateTickets(ticketInstances: Array<InstanceNode>, msg, isCreate
   if (missingVariants.length > 0) {
     missingVariants = [...new Set(missingVariants)]
     let variantString = missingVariants.join("', '");
-    figma.notify(`Status '${variantString}' not existing. You can add it as new variant to the main component.`, { timeout: 6000 })
+    figma.notify(`Status '${variantString}' not existing. You can add it as a new variant to the main component.`, { timeout: 6000 })
   }
   if (numberOfMissingTitles > 0) figma.notify(`${numberOfMissingTitles} tickets are missing text element '${ISSUE_TITLE_NAME}'.`)
   if (numberOfMissingDates > 0) figma.notify(`${numberOfMissingDates} tickets are missing text element '${ISSUE_CHANGE_DATE_NAME}'.`)
@@ -426,7 +426,7 @@ async function createTicketVariant(statusColor: { r: any, g: any, b: any }, stat
 
   // Create the header frame
   var headerFrame = figma.createFrame()
-  headerFrame.name = "Header"
+  headerFrame.name = "Container"
   headerFrame.layoutMode = "HORIZONTAL"
   headerFrame.counterAxisSizingMode = "AUTO"
   headerFrame.layoutAlign = "STRETCH"
@@ -435,7 +435,7 @@ async function createTicketVariant(statusColor: { r: any, g: any, b: any }, stat
 
   // Create the header frame
   var detailsFrame = figma.createFrame()
-  detailsFrame.name = "Header"
+  detailsFrame.name = "Container"
   detailsFrame.layoutMode = "HORIZONTAL"
   detailsFrame.counterAxisSizingMode = "AUTO"
   detailsFrame.layoutAlign = "STRETCH"

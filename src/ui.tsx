@@ -169,13 +169,18 @@ export function App() {
 
     var allCredentialsProvided = true
     if (companyName === "") {
-      setCompanyNameError("Please enter a company domain name.")
+      setCompanyNameError("Please enter a company name.")
+      allCredentialsProvided = false
+    } else if (companyName != encodeURIComponent(companyName)){
+      setCompanyNameError("Please enter the name that appears in your Jira URL before '.atlassian.net'.")
       allCredentialsProvided = false
     }
+
     if (username === "") {
       setUsernameError("Please enter a username.")
       allCredentialsProvided = false
     }
+    
     if (password === "") {
       setPasswordError("Please enter an API token.")
       allCredentialsProvided = false
@@ -195,6 +200,8 @@ export function App() {
   // Checks if user has entered the correct credentials
   async function checkAuthenticationAndSaveData(username, password, companyName, projectId) {
     const basicAuth = Buffer.from(username + ':' + password).toString('base64')
+    companyName = companyName.replace(/(.atlassian.net)/, "")
+
     setSaveAuthDetailsLoader(true)
     let authData = await testAuthentication(basicAuth, companyName)
     setSaveAuthDetailsLoader(false)
@@ -217,12 +224,17 @@ export function App() {
       } else if (authData.message === "Request failed with status code 404") {
         setCompanyNameError("Company domain name does not exist.")
       }
+      // Wrong domain
+      else if (authData.message.includes("Hostname/IP does not match")) {
+        setCompanyNameError("Please enter the name that appears in your Jira URL before '.atlassian.net'.")
+        throw new Error(authData.message)
+      }
       // No internet
       else if (authData.message === "Failed to fetch") {
         setGeneralError("Authentication failed. There seems to be no connection to the server.")
         throw new Error(authData.message)
       } else {
-        setGeneralError("Authentication failed. There seems to be no connection to Jira.")
+        setGeneralError(`Authentication failed. Error message: ${authData.message}.`)
         throw new Error(authData.message)
       }
     }
@@ -296,13 +308,13 @@ export function App() {
         </div>
         <div className='vertical padding-small'>
           <div className='section-title-with-icon'>
-            <Title level="h2" size="" weight="bold">Project Settings</Title>
+            <Title level="h2" size="" weight="bold">File Settings</Title>
           </div>
-          <Label>This information is stored across all members of this project.</Label>
+          <Label>This information is stored across all members of this file.</Label>
           <div className='row'>
             <div>
               <div>
-                <Text>Company Domain Name </Text>
+                <Text>Jira Domain Name</Text>
               </div>
               <div className="input">
                 <input ref={companyNameInput} type="input" className="input__field" defaultValue={companyName} placeholder="e.g. parkside-interactive" />
@@ -347,7 +359,7 @@ export function App() {
             {!showAuthForOnboarding && <Button className="" isSecondary id="create-component" onClick={function _() { switchView() }}>Back</Button>}
             {!showAuthForOnboarding && <Button className="" id="create-component" onClick={function _() { onSaveAuthDetails() }}>
               {saveAuthDetailsLoader && <div>
-                <PulseLoader color={"#fff"} loading={true} size={4} margin={'2'} />
+                <PulseLoader color={"#fff"} loading={true} size={4} margin={'2px'} />
                 &nbsp; Saving Changes
               </div>}
               {!saveAuthDetailsLoader && <div>Save Changes</div>}
@@ -360,7 +372,7 @@ export function App() {
       <div>
         {ticketDataLoader &&
           <div className='divider overlay'>
-            <div style={{ marginTop: 4 }}><PulseLoader color={"#000"} loading={true} size={4} margin={'2'} /> </div>
+            <div style={{ marginTop: 4 }}><PulseLoader color={"#000"} loading={true} size={4} margin={'2px'} /> </div>
             <div className='type'>&nbsp; Loading ticket data...</div>
           </div>}
         <div className='vertical padding-small divider'>
