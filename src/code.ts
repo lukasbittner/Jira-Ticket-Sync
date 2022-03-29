@@ -1,3 +1,4 @@
+import { text } from "stream/consumers"
 
 const DOCUMENT_NODE = figma.currentPage.parent
 
@@ -31,6 +32,8 @@ function getTitle(data) { return data.fields.summary }
 function getIssueId(data) { return data.key }
 function getChangeDate(data) { return data.fields.statuscategorychangedate }
 function getAssignee(data) { return data.fields.assignee.displayName }
+function getDescription(data) { return data.fields.description }
+
 
 var nextTicketOffset = 0
 
@@ -42,6 +45,7 @@ const ISSUE_ID_NAME = "Ticket ID"
 const ISSUE_TITLE_NAME = "Ticket Title"
 const ISSUE_CHANGE_DATE_NAME = "Date of Status Change"
 const ASSIGNEE_NAME = "Assignee"
+const DESCRIPTION_NAME = "Description"
 
 const COMPONENT_SET_NAME = "Jira Ticket Header"
 const COMPONENT_SET_PROPERTY_NAME = "Status="
@@ -54,7 +58,7 @@ const VARIANT_COLOR_3 = hexToRgb('D7E0FF')
 const VARIANT_NAME_4 = "Testing"
 const VARIANT_COLOR_4 = hexToRgb('D7E0FF')
 const VARIANT_NAME_DONE = "Launch"
-const VARIANT_COLOR_DONE = hexToRgb('D3FFD2')
+const VARIANT_COLOR_DONE = hexToRgb('C0E9BF ')
 const VARIANT_NAME_DEFAULT = "Default"
 const VARIANT_COLOR_DEFAULT = hexToRgb('B9B9B9')
 const VARIANT_NAME_ERROR = "Error"
@@ -82,9 +86,7 @@ referenceTicketComponentSet()
 async function updateWithoutUI(type) {
   figma.showUI(__html__, { visible: false })
   await sendData()
-  console.log(1)
   var hasFailed = requestUpdateForTickets(type)
-  console.log(2)
   if (hasFailed && (type === "all" || type === "page" || type === "selection")) {
     figma.closePlugin()
   }
@@ -331,6 +333,55 @@ async function updateTickets(ticketInstances: Array<InstanceNode>, msg, isCreate
       numberOfMissingAssignees += 1
     }
 
+    // Update description
+    let descriptionNode = ticketInstance.findOne(n => n.type === "TEXT" && n.name === DESCRIPTION_NAME) as TextNode
+    let descriptionText = getDescription(ticketData)
+    if (descriptionNode && descriptionText) {
+
+      let fontFamily = "Helvetica"
+      let regFont = { family: fontFamily, style: "Regular" }
+
+      await figma.loadFontAsync(regFont as FontName)
+      descriptionNode.fontName = regFont
+
+
+
+      // Bullet points
+      while (descriptionText.match(/\n(\*)+[^\w]/)) {
+        let count = descriptionText.match(/\n(\*)+[^\w]/)[0].length
+        count = (count - 2) * 2
+        var spaces = new Array(count).join(" ")
+        descriptionText = descriptionText.replace(/\n(\*)+[^\w]/, `\n${spaces}• `)
+      }
+      descriptionNode.characters = descriptionText
+
+      // Panel
+      let regexPanel = /\{panel.*?}(.+?)\{panel\}/s
+      let fontPanel = { family: fontFamily, style: "Regular" }
+      await changeFontsByRegex(descriptionNode, regexPanel, fontPanel, 1, "-------", "-------")
+
+      // Code
+      let regexCode = /\{noformat\}(.*?)\{noformat\}/s
+      let fontCode = { family: "Courier", style: "Regular" }
+      await changeFontsByRegex(descriptionNode, regexCode, fontCode, 1, "-------\n", "-------")
+
+      // Bold
+      let regexBold = /\*(.+?)\*/
+      let fontBold = { family: fontFamily, style: "Bold" }
+      await changeFontsByRegex(descriptionNode, regexBold, fontBold, 1)
+
+      // Italic
+      let regexItalic = /_([^_].*?)_/
+      let fontItalic = { family: fontFamily, style: "Oblique" }
+      await changeFontsByRegex(descriptionNode, regexItalic, fontItalic, 1)
+
+      // Title
+      let regexTitle = /h([1-9])\.\s(.*)/
+      let fontTitle = { family: fontFamily, style: "Bold" }
+      await changeFontsByRegex(descriptionNode, regexTitle, fontTitle, 2)
+
+    }
+
     // Add the relaunch button
     ticketInstance.swapComponent(newVariant)
     ticketInstance.setRelaunchData({ update_selection: '' })
@@ -371,6 +422,40 @@ async function updateTickets(ticketInstances: Array<InstanceNode>, msg, isCreate
   }
   return ticketInstances
 }
+
+/**
+ * Changes the font in a Text node based on an indices array.
+ * @param font Font Name
+ * @param textNode Text Node
+ * @param indices Indices array with index and length of range
+ * @return Text Node
+ */
+async function changeFontsByRegex(textNode: TextNode, regex: RegExp, font: FontName, contentGroup: number, preText = "", postText = "") {
+
+  await figma.loadFontAsync(font)
+
+  while (textNode.characters.match(regex)) {
+    let match = textNode.characters.match(regex)
+    let length = match[0].length
+    let index = match.index
+    let newText = match[contentGroup]
+    let wholeText = preText + newText + postText
+
+    // console.log("Delete Match", match, length)
+
+    if (length > 0) {
+      textNode.deleteCharacters(index, index + length)
+      textNode.insertCharacters(index, wholeText)
+      textNode.setRangeFontName(index, index + wholeText.length, font)
+    }
+  }
+
+  return textNode
+}
+
+
+
+
 
 /**
  * Create instances of the main ticket component and replaces the content with data of the actual Jira ticket
@@ -433,7 +518,7 @@ async function createTicketVariant(statusColor: { r: any, g: any, b: any }, stat
   headerFrame.itemSpacing = 40
   headerFrame.fills = []
 
-  // Create the header frame
+  // Create the details frame
   var detailsFrame = figma.createFrame()
   detailsFrame.name = "Container"
   detailsFrame.layoutMode = "HORIZONTAL"
@@ -441,6 +526,19 @@ async function createTicketVariant(statusColor: { r: any, g: any, b: any }, stat
   detailsFrame.layoutAlign = "STRETCH"
   detailsFrame.itemSpacing = 32
   detailsFrame.fills = []
+
+  // Create the description frame
+  var descriptionFrame = figma.createFrame()
+  descriptionFrame.name = "Container"
+  descriptionFrame.layoutMode = "HORIZONTAL"
+  descriptionFrame.counterAxisSizingMode = "AUTO"
+  descriptionFrame.layoutAlign = "STRETCH"
+  descriptionFrame.itemSpacing = 32
+  descriptionFrame.cornerRadius = 8
+  descriptionFrame.verticalPadding = 16
+  descriptionFrame.horizontalPadding = 16
+  descriptionFrame.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }]
+
 
   loadFonts().then(() => {
     // Add the ticket text fields
@@ -473,12 +571,22 @@ async function createTicketVariant(statusColor: { r: any, g: any, b: any }, stat
     assigneeTxt.characters = "Name of assignee"
     assigneeTxt.name = ASSIGNEE_NAME
 
+    const descriptionTxt = figma.createText()
+    descriptionTxt.fontName = FONT_REG
+    descriptionTxt.fontSize = 24
+    descriptionTxt.autoRename = false
+    descriptionTxt.characters = "Description"
+    descriptionTxt.name = DESCRIPTION_NAME
+    descriptionTxt.layoutGrow = 1
+
     ticketVariant.appendChild(headerFrame)
     ticketVariant.appendChild(detailsFrame)
+    ticketVariant.appendChild(descriptionFrame)
     headerFrame.appendChild(issueIdTxt)
     headerFrame.appendChild(titleTxt)
     detailsFrame.appendChild(assigneeTxt)
     detailsFrame.appendChild(changeDateTxt)
+    descriptionFrame.appendChild(descriptionTxt)
 
     titleTxt.layoutGrow = 1
     assigneeTxt.layoutGrow = 1
@@ -491,6 +599,9 @@ async function createTicketVariant(statusColor: { r: any, g: any, b: any }, stat
   headerFrame.layoutAlign = "STRETCH"
   detailsFrame.primaryAxisSizingMode = "FIXED"
   detailsFrame.layoutAlign = "STRETCH"
+  descriptionFrame.primaryAxisSizingMode = "FIXED"
+  descriptionFrame.layoutAlign = "STRETCH"
+
 
   return ticketVariant
 }
@@ -641,6 +752,10 @@ async function loadFonts() {
   await figma.loadFontAsync(FONT_MED)
   await figma.loadFontAsync(FONT_BOLD)
 
+}
+
+async function loadSingleFont(fontName: FontName) {
+  await figma.loadFontAsync(fontName)
 }
 
 // Formats a hex value to RGB
