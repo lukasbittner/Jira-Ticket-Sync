@@ -79,8 +79,10 @@ export async function postLinkToIssue(issueId, link, basicAuth, companyName) {
     })
     .then((data) => {
       response = data
+      console.log("Data", data)
     })
     .catch((error: Error) => {
+      console.log("Error", error)
       response = error
     })
   return response

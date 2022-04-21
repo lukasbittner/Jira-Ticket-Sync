@@ -351,7 +351,7 @@ export function App() {
           <div className='horizontal align-right padding-small'>
             {showAuthForOnboarding && <Button className="" id="create-component" onClick={function _() { onSaveAuthDetails() }}>
               {saveAuthDetailsLoader && <div>
-                <PulseLoader color={"#fff"} loading={true} size={4} margin={'2'} />
+                <PulseLoader color={"#fff"} loading={true} size={4} margin={'2px'} />
                 &nbsp; Saving
               </div>}
               {!saveAuthDetailsLoader && <div>Save</div>}

@@ -1,4 +1,3 @@
-import { text } from "stream/consumers"
 
 const DOCUMENT_NODE = figma.currentPage.parent
 
@@ -15,6 +14,8 @@ const USERNAME_KEY: string = "USERNAME"
 const PASSWORD_KEY: string = "PASSWORD"
 const ISSUE_ID_KEY: string = "ISSUE_ID"
 const CREATE_LINK_KEY: string = "CREATE_LINK"
+const LIBRARY_COMPONENT_KEY: string = "LIBRARY_COMPONENT"
+
 
 var company_name: string // Saved publicly with setPluginData
 var project_id: string // Saved publicly with setPluginData
@@ -51,13 +52,11 @@ const COMPONENT_SET_NAME = "Jira Ticket Header"
 const COMPONENT_SET_PROPERTY_NAME = "Status="
 const VARIANT_NAME_1 = "To Do"
 const VARIANT_COLOR_1 = hexToRgb('EEEEEE')
-const VARIANT_NAME_2 = "Concepting"
+const VARIANT_NAME_2 = "In Progress"
 const VARIANT_COLOR_2 = hexToRgb('FFEDC0')
-const VARIANT_NAME_3 = "Design"
+const VARIANT_NAME_3 = "In Review"
 const VARIANT_COLOR_3 = hexToRgb('D7E0FF')
-const VARIANT_NAME_4 = "Testing"
-const VARIANT_COLOR_4 = hexToRgb('D7E0FF')
-const VARIANT_NAME_DONE = "Launch"
+const VARIANT_NAME_DONE = "Done"
 const VARIANT_COLOR_DONE = hexToRgb('C0E9BF ')
 const VARIANT_NAME_DEFAULT = "Default"
 const VARIANT_COLOR_DEFAULT = hexToRgb('B9B9B9')
@@ -73,7 +72,11 @@ if (figma.command === 'update_selection') {
   updateWithoutUI("all")
 } else if (figma.command === 'update_page') {
   updateWithoutUI("page")
-} else {
+} else if (figma.command === 'set_library_component') {
+  let selection = figma.currentPage.selection[0]
+  saveLibraryComponent(selection)
+}
+else {
   // Otherwise show UI
   figma.showUI(__html__, { width: WINDOW_WIDTH, height: WINDOW_HEIGHT_SMALL });
   sendData()
@@ -193,6 +196,18 @@ async function getAuthorizationInfo(key: string, savedPublic = false) {
   return valueSaved
 }
 
+async function saveLibraryComponent(node: SceneNode) {
+  let componentKey
+  if (node.type === 'COMPONENT_SET') {
+    componentKey = node.key
+    await figma.clientStorage.setAsync(LIBRARY_COMPONENT_KEY, componentKey)
+    figma.closePlugin("Component successfully saved as global JTS component.")
+  } else {
+    figma.closePlugin("Element is not a component set. Could not be saved as library component.")
+  }
+}
+
+
 /**
  * Get subset of tickets in document and start update process
  * @param subset A subset of ticket instances in the document
@@ -251,17 +266,19 @@ async function getDataForTickets(instances) {
     const node = instances[i]
     if (node.type !== "INSTANCE") {
       figma.notify("The element needs to be an instance of " + COMPONENT_SET_NAME)
+      if (figma.command) figma.closePlugin()
     } else {
       let issueIdNode = node.findOne(n => n.type === "TEXT" && n.name === ISSUE_ID_NAME) as TextNode
       if (!issueIdNode) {
         figma.notify(`At least one instance is missing the text element '${ISSUE_ID_NAME}'. Could not update.`)
+        if (figma.command) figma.closePlugin()
       } else {
         issueIds.push(issueIdNode.characters)
         nodeIds.push(node.id)
+        figma.ui.postMessage({ nodeIds: nodeIds, issueIds: issueIds, type: 'getTicketData' })
       }
     }
   }
-  figma.ui.postMessage({ nodeIds: nodeIds, issueIds: issueIds, type: 'getTicketData' })
 }
 
 /**
@@ -343,8 +360,6 @@ async function updateTickets(ticketInstances: Array<InstanceNode>, msg, isCreate
 
       await figma.loadFontAsync(regFont as FontName)
       descriptionNode.fontName = regFont
-
-
 
       // Bullet points
       while (descriptionText.match(/\n(\*)+[^\w]/)) {
@@ -616,10 +631,9 @@ async function createTicketComponentSet() {
   let var1 = await createTicketVariant(VARIANT_COLOR_1, COMPONENT_SET_PROPERTY_NAME + VARIANT_NAME_1)
   let var2 = await createTicketVariant(VARIANT_COLOR_2, COMPONENT_SET_PROPERTY_NAME + VARIANT_NAME_2)
   let var3 = await createTicketVariant(VARIANT_COLOR_3, COMPONENT_SET_PROPERTY_NAME + VARIANT_NAME_3)
-  let var4 = await createTicketVariant(VARIANT_COLOR_4, COMPONENT_SET_PROPERTY_NAME + VARIANT_NAME_4)
   let var5 = await createTicketVariant(VARIANT_COLOR_DONE, COMPONENT_SET_PROPERTY_NAME + VARIANT_NAME_DONE)
   let varError = await createTicketVariant(VARIANT_COLOR_ERROR, COMPONENT_SET_PROPERTY_NAME + VARIANT_NAME_ERROR)
-  const variants = [varDefault, var1, var2, var3, var4, var5, varError]
+  const variants = [varDefault, var1, var2, var3, var5, varError]
 
   // Create a component out of all these variants
   ticketComponent = figma.combineAsVariants(variants, figma.currentPage)
@@ -637,6 +651,7 @@ async function createTicketComponentSet() {
 
   // Save component ID for later reference
   DOCUMENT_NODE.setPluginData('ticketComponentID', ticketComponent.id)
+  ticketComponent.setRelaunchData({ set_library_component: 'Publish the component in a library and then click this button.' })
 
   // Make sure the component is visible where we're currently looking
   ticketComponent.x = figma.viewport.center.x - (ticketComponent.width / 2)
@@ -646,23 +661,73 @@ async function createTicketComponentSet() {
 }
 
 /**
- * Creates a new main ticket component or gets the reference to the existing one
+ * Creates a new main ticket component or gets the reference to the existing one in the following order:
+ * 1. Looks for library component based on public key
+ * 2. Looks for library component based on private key
+ * 3. Looks for local component based on public key
+ * 4. Looks for local component based on component name
+ * 5. Creates a new component
  */
 async function referenceTicketComponentSet() {
   // Check if the ticket component is already saved in the variable
   if (!ticketComponent) {
-    // If no, try the get the ticket component by its ID
-    var ticketComponentId = DOCUMENT_NODE.getPluginData('ticketComponentID')
-    let node
-    if (ticketComponentId && (node = figma.getNodeById(ticketComponentId))) {
-      // If there is an ID saved, access the ticket component
-      ticketComponent = node
+    //Try to get library component...
+    //...from component key saved in this project
+    var publicTicketComponentKey = DOCUMENT_NODE.getPluginData(LIBRARY_COMPONENT_KEY)
+    let libraryComponent
+    if (publicTicketComponentKey && (libraryComponent = await importLibraryComponent(publicTicketComponentKey))) {
+      console.log("PUBLIC", publicTicketComponentKey)
+      ticketComponent = libraryComponent
     } else {
-      // If there is no ID, create a new component
-      ticketComponent = await createTicketComponentSet();
+      console.log("PUBLIC lib comp", libraryComponent)
+      //...or from component key saved with the user
+      var privateTicketComponentKey = await figma.clientStorage.getAsync(LIBRARY_COMPONENT_KEY)
+      if (privateTicketComponentKey && (libraryComponent = await importLibraryComponent(privateTicketComponentKey))) {
+        console.log("PRIVATE", privateTicketComponentKey)
+        DOCUMENT_NODE.setPluginData(LIBRARY_COMPONENT_KEY, privateTicketComponentKey) // Safe key publicly
+        ticketComponent = libraryComponent
+      }
+      else {
+        // If there is no library component, try the get the ticket component by its ID
+        var ticketComponentId = DOCUMENT_NODE.getPluginData('ticketComponentID')
+        let node
+        if (ticketComponentId && (node = figma.getNodeById(ticketComponentId))) {
+          // If there is an ID saved, access the ticket component
+          console.log("LOCAL", ticketComponentId)
+          ticketComponent = node
+        }
+        else {
+          // If there is a component somewhere with the right name
+          let componentSets = figma.root.findAllWithCriteria({
+            types: ['COMPONENT_SET']
+          })
+          componentSets = componentSets.filter(node => node.name === COMPONENT_SET_NAME);
+          if (componentSets[0]) {
+            ticketComponent = componentSets[0]
+            DOCUMENT_NODE.setPluginData('ticketComponentID', ticketComponent.id)
+          } else {
+            // If there is no component, create a new component
+            ticketComponent = await createTicketComponentSet();
+          }
+        }
+      }
     }
   }
 }
+
+async function importLibraryComponent(key) {
+  var libraryComponent
+  await figma.importComponentSetByKeyAsync(key)
+  .then((result) => {
+    libraryComponent = result
+  })
+  .catch(() => {
+    libraryComponent = false
+  })
+  console.log("LIB FUNC", libraryComponent)
+  return libraryComponent
+}
+
 
 // Checks if fetching data was successful at all 
 function checkFetchSuccess(data) {
