@@ -71,7 +71,8 @@ export function App() {
       let password = event.data.pluginMessage.password
       let issueId = event.data.pluginMessage.issueId
       let createLink = event.data.pluginMessage.createLink
-
+      
+      if(companyName !== "" && !companyName.includes(".")) companyName = companyName + ".atlassian.net"
       setCompanyName(companyName)
       setProjectId(projectId)
       setUsername(username)
@@ -200,7 +201,10 @@ export function App() {
   // Checks if user has entered the correct credentials
   async function checkAuthenticationAndSaveData(username, password, companyName, projectId) {
     const basicAuth = Buffer.from(username + ':' + password).toString('base64')
-    companyName = companyName.replace(/(.atlassian.net)/, "")
+
+    if(!companyName.includes(".")) companyName = companyName + ".atlassian.net"
+    companyName = companyName.replace(/(www.)/, "")
+    console.log(companyName)
 
     setSaveAuthDetailsLoader(true)
     let authData = await testAuthentication(basicAuth, companyName)
@@ -234,7 +238,8 @@ export function App() {
         setGeneralError("Authentication failed. There seems to be no connection to the server.")
         throw new Error(authData.message)
       } else {
-        setGeneralError(`Authentication failed. Error message: ${authData.message}.`)
+        setCompanyNameError(`Invalid URL. Check if you have entered the correct Jira domain URL.`)
+        // setCompanyName(`Authentication failed. Error message: ${authData.message}.`)
         throw new Error(authData.message)
       }
     }
@@ -322,7 +327,7 @@ export function App() {
               {companyNameError.length > 0 &&
                 <Text className="error-text">{companyNameError}</Text>
               }
-              <div className='type black3'>www.<b>company-name</b>.atlassian.net</div>
+              <div className='type black3'><b>company-name</b>.atlassian.net <br/> or jira.<b>company-name</b>.io</div>
             </div>
           </div>
           <div className='row'>
@@ -337,8 +342,9 @@ export function App() {
               <div className='type black3'>
                 Allows you to link "Jira Ticket Headers" in the respective Jira tickets.
                 <ol style={{ paddingLeft: 20 }}>
-                  <li>Create a shareable project link.</li>
+                  <li>Create a shareable file link <br/> (Share &gt; Copy Link).</li>
                   <li>The ID is part of the link. <br />figma.com/file/<b>--ID--</b>/project-name</li>
+                  <li>Copy the ID and paste it in here.</li>
                 </ol>
               </div>
             </div>

@@ -75,8 +75,11 @@ if (figma.command === 'update_selection') {
 } else if (figma.command === 'set_library_component') {
   let selection = figma.currentPage.selection[0]
   saveLibraryComponent(selection)
-}
-else {
+} else if (figma.command === 'remove_library_component') {
+  let selection = figma.currentPage.selection[0]
+  deleteLibraryComponent(selection)
+  selection.setRelaunchData({ remove_library_component: 'Unpublish global component. It will not be used in other files anymore.' })
+} else {
   // Otherwise show UI
   figma.showUI(__html__, { width: WINDOW_WIDTH, height: WINDOW_HEIGHT_SMALL });
   sendData()
@@ -196,15 +199,33 @@ async function getAuthorizationInfo(key: string, savedPublic = false) {
   return valueSaved
 }
 
-async function saveLibraryComponent(node: SceneNode) {
+/**
+ * Saves a component library key so it can be referenced and reused in other files.
+ * @param componentNode The component to be used globally
+ */
+async function saveLibraryComponent(componentNode: SceneNode) {
   let componentKey
-  if (node.type === 'COMPONENT_SET') {
-    componentKey = node.key
+  if (componentNode.type === 'COMPONENT_SET') {
+    componentKey = componentNode.key
     await figma.clientStorage.setAsync(LIBRARY_COMPONENT_KEY, componentKey)
-    figma.closePlugin("Component successfully saved as global JTS component.")
+    componentNode.absoluteRenderBounds
+    // componentNode.setRelaunchData({})
+    componentNode.setRelaunchData({ remove_library_component: 'The component will not be used anymore in new files.' })
+    figma.closePlugin("Set as global JTS component. Make sure the component is published in a library.")
   } else {
     figma.closePlugin("Element is not a component set. Could not be saved as library component.")
   }
+}
+
+/**
+ * Removes a component library key so it can not be referenced and reused in other files anymore.
+ * @param componentNode The component on which the relaunch data button should be switched
+ */
+async function deleteLibraryComponent(componentNode: SceneNode) {
+  await figma.clientStorage.deleteAsync(LIBRARY_COMPONENT_KEY)
+  componentNode.setRelaunchData({})
+  componentNode.setRelaunchData({ set_library_component: 'Publish the component in a library and then click this button.' })
+  figma.closePlugin("Unpublished global JTS component.")
 }
 
 
@@ -245,8 +266,9 @@ function requestUpdateForTickets(subset) {
   // Selected elements
   else if (subset == "selection") {
     nodes = figma.currentPage.selection
+    nodes = nodes.filter(node => node.name === COMPONENT_SET_NAME);
     if (nodes.length == 0) {
-      figma.notify(`Nothing selected.`)
+      figma.notify(`No "${COMPONENT_SET_NAME}" instance selected.`)
       isFailed = true
     } else {
       getDataForTickets(nodes)
@@ -257,27 +279,32 @@ function requestUpdateForTickets(subset) {
 
 /**
  * Sends a request to the UI to fetch data for an array of tickets
- * @param instances 
+ * @param instances Instances of the JTS component
  */
 async function getDataForTickets(instances) {
   var nodeIds = []
   var issueIds = []
+  var missingIds = 0
   for (let i = 0; i < instances.length; i++) {
     const node = instances[i]
-    if (node.type !== "INSTANCE") {
-      figma.notify("The element needs to be an instance of " + COMPONENT_SET_NAME)
-      if (figma.command) figma.closePlugin()
-    } else {
+    if (node.type === "INSTANCE") {
       let issueIdNode = node.findOne(n => n.type === "TEXT" && n.name === ISSUE_ID_NAME) as TextNode
-      if (!issueIdNode) {
-        figma.notify(`At least one instance is missing the text element '${ISSUE_ID_NAME}'. Could not update.`)
-        if (figma.command) figma.closePlugin()
+      if (!issueIdNode || issueIdNode.characters === "") {
+        missingIds += 1
       } else {
         issueIds.push(issueIdNode.characters)
         nodeIds.push(node.id)
-        figma.ui.postMessage({ nodeIds: nodeIds, issueIds: issueIds, type: 'getTicketData' })
       }
     }
+  }
+  // If any instance is missing the ID.
+  if (missingIds > 0) figma.notify(`${missingIds} instance(s) is missing the text element '${ISSUE_ID_NAME}' and could not be updated.`)
+
+  // Get ticket data if 
+  if (issueIds.length === 0 || nodeIds.length === 0) {
+    if (figma.command) figma.closePlugin()
+  } else {
+    figma.ui.postMessage({ nodeIds: nodeIds, issueIds: issueIds, type: 'getTicketData' })
   }
 }
 
@@ -290,6 +317,7 @@ async function getDataForTickets(instances) {
  * @returns Updated ticket instances
  */
 async function updateTickets(ticketInstances: Array<InstanceNode>, msg, isCreateNew = false) {
+
   var ticketDataArray = msg.data
   var issueIds = msg.issueIds
 
@@ -319,7 +347,7 @@ async function updateTickets(ticketInstances: Array<InstanceNode>, msg, isCreate
     if (titleTxt) {
       await figma.loadFontAsync(titleTxt.fontName as FontName)
       titleTxt.characters = getTitle(ticketData)
-      titleTxt.hyperlink = { type: "URL", value: `https://${company_name}.atlassian.net/browse/${ticketData.key}` }
+      titleTxt.hyperlink = { type: "URL", value: `https://${company_name}/browse/${ticketData.key}` }
     } else {
       numberOfMissingTitles += 1
     }
@@ -555,7 +583,7 @@ async function createTicketVariant(statusColor: { r: any, g: any, b: any }, stat
   descriptionFrame.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }]
 
 
-  loadFonts().then(() => {
+  await loadFonts().then(() => {
     // Add the ticket text fields
     const titleTxt = figma.createText()
     titleTxt.fontName = FONT_REG
@@ -662,54 +690,48 @@ async function createTicketComponentSet() {
 
 /**
  * Creates a new main ticket component or gets the reference to the existing one in the following order:
+ * 1. Looks for local component based on component name
  * 1. Looks for library component based on public key
  * 2. Looks for library component based on private key
- * 3. Looks for local component based on public key
- * 4. Looks for local component based on component name
  * 5. Creates a new component
  */
 async function referenceTicketComponentSet() {
-  // Check if the ticket component is already saved in the variable
-  if (!ticketComponent) {
+  // If there is a component somewhere with the right name
+  let componentSets = figma.root.findAllWithCriteria({
+    types: ['COMPONENT_SET']
+  })
+  componentSets = componentSets.filter(node => node.name === COMPONENT_SET_NAME);
+  if (componentSets[0]) {
+    ticketComponent = componentSets[0]
+    DOCUMENT_NODE.setPluginData('ticketComponentID', ticketComponent.id)
+  }
+  else {
+
+    // If there is no library component, try the get the ticket component by its ID
+    // var ticketComponentId = DOCUMENT_NODE.getPluginData('ticketComponentID')
+    // let node
+    // if (ticketComponentId && (node = figma.getNodeById(ticketComponentId))) {
+    // If there is an ID saved, access the ticket component
+    // ticketComponent = node
+    // }
+    // else {
+
+
     //Try to get library component...
     //...from component key saved in this project
     var publicTicketComponentKey = DOCUMENT_NODE.getPluginData(LIBRARY_COMPONENT_KEY)
     let libraryComponent
     if (publicTicketComponentKey && (libraryComponent = await importLibraryComponent(publicTicketComponentKey))) {
-      console.log("PUBLIC", publicTicketComponentKey)
       ticketComponent = libraryComponent
     } else {
-      console.log("PUBLIC lib comp", libraryComponent)
       //...or from component key saved with the user
       var privateTicketComponentKey = await figma.clientStorage.getAsync(LIBRARY_COMPONENT_KEY)
       if (privateTicketComponentKey && (libraryComponent = await importLibraryComponent(privateTicketComponentKey))) {
-        console.log("PRIVATE", privateTicketComponentKey)
         DOCUMENT_NODE.setPluginData(LIBRARY_COMPONENT_KEY, privateTicketComponentKey) // Safe key publicly
         ticketComponent = libraryComponent
-      }
-      else {
-        // If there is no library component, try the get the ticket component by its ID
-        var ticketComponentId = DOCUMENT_NODE.getPluginData('ticketComponentID')
-        let node
-        if (ticketComponentId && (node = figma.getNodeById(ticketComponentId))) {
-          // If there is an ID saved, access the ticket component
-          console.log("LOCAL", ticketComponentId)
-          ticketComponent = node
-        }
-        else {
-          // If there is a component somewhere with the right name
-          let componentSets = figma.root.findAllWithCriteria({
-            types: ['COMPONENT_SET']
-          })
-          componentSets = componentSets.filter(node => node.name === COMPONENT_SET_NAME);
-          if (componentSets[0]) {
-            ticketComponent = componentSets[0]
-            DOCUMENT_NODE.setPluginData('ticketComponentID', ticketComponent.id)
-          } else {
-            // If there is no component, create a new component
-            ticketComponent = await createTicketComponentSet();
-          }
-        }
+      } else {
+        // If there is no component, create a new component
+        ticketComponent = await createTicketComponentSet();
       }
     }
   }
@@ -718,13 +740,12 @@ async function referenceTicketComponentSet() {
 async function importLibraryComponent(key) {
   var libraryComponent
   await figma.importComponentSetByKeyAsync(key)
-  .then((result) => {
-    libraryComponent = result
-  })
-  .catch(() => {
-    libraryComponent = false
-  })
-  console.log("LIB FUNC", libraryComponent)
+    .then((result) => {
+      libraryComponent = result
+    })
+    .catch(() => {
+      libraryComponent = false
+    })
   return libraryComponent
 }
 
@@ -773,14 +794,9 @@ function checkTicketDataReponse(ticketData, issueId) {
     checkedData = ticketData
   }
   // ID does not exist
-  else if (ticketData.errorMessages == "The issue no longer exists.") {
-    checkedData = createErrorDataJSON(`Error: Ticket ID '${issueId}' does not exist.`, issueId)
+  else if (ticketData.errorMessages) {
+    checkedData = createErrorDataJSON(`Error: ${ticketData.errorMessages}`, issueId)
     // figma.notify(`Ticket ID '${issueId}' does not exist.`)
-  }
-  // ID has invalid format
-  else if (ticketData.errorMessages == "Issue key is in an invalid format.") {
-    checkedData = createErrorDataJSON(`Error: Ticket ID '${issueId}' is in an invalid format.`, issueId)
-    // figma.notify(`Ticket ID '${issueId}' is in an invalid format.`)
   }
   // Other
   else {
@@ -791,7 +807,6 @@ function checkTicketDataReponse(ticketData, issueId) {
   }
   return checkedData
 }
-
 
 // Create a error variable that has the same main fields as the Jira Ticket variable. 
 // This will be used the fill the ticket data with the error message.

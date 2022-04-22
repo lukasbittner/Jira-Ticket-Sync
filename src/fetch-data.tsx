@@ -1,6 +1,6 @@
 // All the functions used to to call the Firebase server and fetch data
 
-// const BASELINK = "http://localhost:5001/figma-jira-plugin-function/us-central1" // To test locally with Firebase emulator
+// const BASELINK = "http://localhost:5000/figma-jira-plugin-function/us-central1" // To test locally with Firebase emulator
 const BASELINK = "https://us-central1-figma-jira-plugin-function.cloudfunctions.net"
 const FIREBASE_URL_GET_ISSUES = `${BASELINK}/getIssue`
 const FIREBASE_URL_POST_LINK = `${BASELINK}/postLinkToIssue`
