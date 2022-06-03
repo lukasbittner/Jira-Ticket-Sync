@@ -99,14 +99,18 @@ export function App() {
 
   // Fetches ticket data and calls sandbox to add a new ticket with that data
   const onCreateTicket = async () => {
-    if (issueId === "") {
+    if (issueId == "") {
       setIssueIdError("Please enter a ticket ID.")
     } else {
       setIssueIdError("")
       const basicAuth = Buffer.from(username + ':' + password).toString('base64')
+
+      // Load data
       setTicketDataLoader(true)
       var ticketDataArray = await getTicketDataFromJira([issueId], basicAuth, companyName)
       setTicketDataLoader(false)
+
+      // Send data to sandbox
       parent.postMessage({ pluginMessage: { type: 'create-new-ticket', data: ticketDataArray, issueIds: [issueId], createLink: createLink } }, '*')
       setIssueId(issueId.replace(/[1-9]*$/, ""))
     }

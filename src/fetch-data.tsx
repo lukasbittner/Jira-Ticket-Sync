@@ -49,7 +49,7 @@ export async function getTicketDataFromJira(issueIds, basicAuth, companyName) {
  * @param issueId Issue Key (e.g FIG-1)
  * @param link Link that should be added to the issue
  * @param basicAuth Basic auth created as base64 string 
- * @param companyName Atlassian domain name of company
+ * @param companyName Atlassian domain URL of company
  * @returns JSON about success
  */
 export async function postLinkToIssue(issueId, link, basicAuth, companyName) {
@@ -91,7 +91,7 @@ export async function postLinkToIssue(issueId, link, basicAuth, companyName) {
 /**
  * Test if user has entered the correct authentication details
  * @param basicAuth Basic auth created as base64 string 
- * @param companyName Atlassian domain name of company
+ * @param companyName Atlassian domain URL of company
  * @returns JSON of information about user
  */
 export async function testAuthentication(basicAuth, companyName) {
