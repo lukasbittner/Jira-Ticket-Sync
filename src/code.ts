@@ -28,7 +28,7 @@ var createLink
 
 const FONT_DEFAULT = { family: "Arial", style: "Regular" }
 tryLoadingFont(FONT_DEFAULT)
-// defineDefault
+var UNLOADED_FONTS: Set<string> = new Set()
 
 const FONT_PRIMARY = { family: "Inter", style: "Medium" }
 const FONT_SECONDARY = { family: "Inter", style: "Regular" }
@@ -121,9 +121,9 @@ async function updateWithoutUI(type) {
 async function sendData() {
   company_name = await getAuthorizationInfo(COMPANY_NAME_KEY, true)
   project_id = await getAuthorizationInfo(PROJECT_ID_KEY, true)
+  issueId = await getAuthorizationInfo(ISSUE_ID_KEY, true)
   username = await getAuthorizationInfo(USERNAME_KEY, false)
   password = await getAuthorizationInfo(PASSWORD_KEY, false)
-  issueId = await getAuthorizationInfo(ISSUE_ID_KEY, false)
   createLink = await getAuthorizationInfo(CREATE_LINK_KEY, false)
   if (createLink === "") createLink = true
   figma.ui.postMessage({ company_name: company_name, project_id: project_id, username: username, password: password, issueId: issueId, createLink: createLink, type: 'setAuthorizationVariables' })
@@ -362,6 +362,8 @@ async function updateTickets(ticketInstances: Array<InstanceNode>, msg, isCreate
       newVariant = ticketComponent.defaultVariant
       missingVariants.push(ticketStatus)
     }
+    ticketInstance.swapComponent(newVariant)
+
 
     // Update title
     let titleNode = ticketInstance.findOne(n => n.type === "TEXT" && n.name === ISSUE_TITLE_NAME) as TextNode
@@ -452,7 +454,6 @@ async function updateTickets(ticketInstances: Array<InstanceNode>, msg, isCreate
     }
 
     // Add the relaunch button
-    ticketInstance.swapComponent(newVariant)
     ticketInstance.setRelaunchData({ update_selection: '' })
   }
 
@@ -481,6 +482,12 @@ async function updateTickets(ticketInstances: Array<InstanceNode>, msg, isCreate
     let firstSentence = `${numberOfNodes - numberOfInvalidIds} of ${numberOfNodes} successfully updated. `
     let secondSentence = (numberOfInvalidIds == 1) ? "1 ID is invalid or does not exist." : `${numberOfInvalidIds} IDs are invalid or do not exist.`
     message = firstSentence + secondSentence
+  }
+
+  // If not all font could be loaded
+  if (UNLOADED_FONTS.size > 0) {
+    figma.notify("Font(s) '" + [...UNLOADED_FONTS].join(', ') + "' could not be loaded. Please install the font or change the component font.")
+    UNLOADED_FONTS.clear()
   }
 
   // If called via the relaunch button, close plugin after updating the tickets
@@ -519,7 +526,7 @@ async function changeFontsByRegex(textNode: TextNode, regex: RegExp, font: FontN
       textNode.deleteCharacters(index, index + length)
       textNode.insertCharacters(index, wholeText)
       textNode.setRangeFontName(index, index + wholeLength, font)
-      if(createHyperLink) {
+      if (createHyperLink) {
         textNode.setRangeHyperlink(index, index + wholeLength, { type: "URL", value: newText })
         textNode.setRangeFills(index, index + wholeLength, FONT_COLOR_URL)
         textNode.setRangeTextDecoration(index, index + wholeLength, "UNDERLINE")
@@ -575,122 +582,24 @@ async function createTicketInstance(msg) {
  * @returns A component that represent a ticket
  */
 async function createTicketVariant(statusColor: { r: any, g: any, b: any }, statusName: string) {
-  // Create variant frame
+
   var ticketVariant = figma.createComponent()
-  ticketVariant.name = statusName
-  ticketVariant.resize(600, 200)
-  ticketVariant.cornerRadius = 16
-  ticketVariant.itemSpacing = 0
-  ticketVariant.layoutMode = "HORIZONTAL"
-  ticketVariant.counterAxisSizingMode = "AUTO"
-  ticketVariant.primaryAxisSizingMode = "FIXED"
-  ticketVariant.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }]
+  ticketVariant.visible = false
 
-  // Create Rectangle
   var statusColorRect = figma.createRectangle()
-  statusColorRect.resize(12, 200)
-  statusColorRect.fills = [{ type: 'SOLID', color: statusColor }]
-  statusColorRect.layoutAlign = "STRETCH"
-  statusColorRect.layoutGrow = 0
-  statusColorRect.topLeftRadius = 16
-  statusColorRect.bottomLeftRadius = 16
-  statusColorRect.name = "Status Color Indicator"
-  
-  // Create the main frame
   var idFrame = figma.createFrame()
-  let padding = 24
-  idFrame.paddingTop = padding
-  idFrame.paddingRight = padding
-  idFrame.paddingBottom = padding
-  idFrame.paddingLeft = padding
-  idFrame.name = "Container"
-  idFrame.layoutMode = "VERTICAL"
-  idFrame.counterAxisSizingMode = "AUTO"
-  idFrame.layoutAlign = "STRETCH"
-  idFrame.layoutGrow = 1
-  idFrame.itemSpacing = 8
-  idFrame.fills = []
-
-  // Create the title frame
   var titleFrame = figma.createFrame()
-  titleFrame.name = "Container"
-  titleFrame.layoutMode = "VERTICAL"
-  titleFrame.counterAxisSizingMode = "AUTO"
-  titleFrame.layoutAlign = "STRETCH"
-  titleFrame.itemSpacing = 16
-  titleFrame.fills = []
-
-  // Create the details frame
   var detailsFrame = figma.createFrame()
-  detailsFrame.name = "Container"
-  detailsFrame.layoutMode = "HORIZONTAL"
-  detailsFrame.counterAxisSizingMode = "AUTO"
-  detailsFrame.layoutAlign = "STRETCH"
-  detailsFrame.itemSpacing = 8
-  detailsFrame.fills = []
-
-  // Create the description frame
   var descriptionFrame = figma.createFrame()
-  descriptionFrame.name = "Container"
-  descriptionFrame.layoutMode = "HORIZONTAL"
-  descriptionFrame.counterAxisSizingMode = "AUTO"
-  descriptionFrame.layoutAlign = "STRETCH"
-  descriptionFrame.itemSpacing = 32
-  descriptionFrame.cornerRadius = 8
-  descriptionFrame.verticalPadding = 16
-  descriptionFrame.horizontalPadding = 16
-  descriptionFrame.fills = [{ type: 'SOLID', color: hexToRgb('f4f5f7') }]
-
-
-  // Add the ticket text fields
   const titleTxt = figma.createText()
-  titleTxt.fontName = await tryLoadingFont(FONT_PRIMARY)
-  titleTxt.fontSize = FONT_SIZE_PRIMARY
-  titleTxt.fills = FONT_COLOR_PRIMARY
-  titleTxt.textDecoration = "UNDERLINE"
-  titleTxt.autoRename = false
-  titleTxt.characters = "Ticket title"
-  titleTxt.name = ISSUE_TITLE_NAME
-
   const issueIdTxt = figma.createText()
-  issueIdTxt.fontName = await tryLoadingFont(FONT_SECONDARY)
-  issueIdTxt.fontSize = FONT_SIZE_SECONDARY
-  issueIdTxt.fills = FONT_COLOR_SECONDARY
-  issueIdTxt.autoRename = false
-  issueIdTxt.characters = "ID-1"
-  issueIdTxt.name = ISSUE_ID_NAME
-
   const statusTxt = figma.createText()
-  statusTxt.fontName = await tryLoadingFont(FONT_SECONDARY)
-  statusTxt.fontSize = FONT_SIZE_SECONDARY
-  statusTxt.fills = FONT_COLOR_SECONDARY
-  statusTxt.autoRename = false
-  statusTxt.characters = statusName.replace('Status=','')
-  statusTxt.name = STATUS_NAME
-
-  const changeDateTxt = statusTxt.clone()
-  changeDateTxt.characters = "MM DD YYYY"
-  changeDateTxt.name = ISSUE_CHANGE_DATE_NAME
-
-  const assigneeTxt = statusTxt.clone()
-  assigneeTxt.characters = "Name of assignee"
-  assigneeTxt.name = ASSIGNEE_NAME
-
-  const dividerTxt1 = statusTxt.clone()
-  dividerTxt1.characters = "/"
-  dividerTxt1.name = "/"
-
-  const dividerTxt2 = dividerTxt1.clone()
-
+  const changeDateTxt = figma.createText()
+  const assigneeTxt = figma.createText()
+  const dividerTxt1 = figma.createText()
+  const dividerTxt2 = figma.createText()
   const descriptionTxt = figma.createText()
-  descriptionTxt.fontName = await tryLoadingFont(FONT_DESCRIPTION)
-  descriptionTxt.fontSize = 16
-  descriptionTxt.fills = FONT_COLOR_PRIMARY
-  descriptionTxt.autoRename = false
-  descriptionTxt.characters = "Description"
-  descriptionTxt.name = DESCRIPTION_NAME
-  descriptionTxt.layoutGrow = 1
-  
+
 
   ticketVariant.appendChild(statusColorRect)
   ticketVariant.appendChild(idFrame)
@@ -706,6 +615,128 @@ async function createTicketVariant(statusColor: { r: any, g: any, b: any }, stat
   detailsFrame.appendChild(dividerTxt2)
   detailsFrame.appendChild(changeDateTxt)
 
+
+
+
+  // Create variant frame
+  ticketVariant.name = statusName
+  ticketVariant.resize(600, 200)
+  ticketVariant.cornerRadius = 16
+  ticketVariant.itemSpacing = 0
+  ticketVariant.layoutMode = "HORIZONTAL"
+  ticketVariant.counterAxisSizingMode = "AUTO"
+  ticketVariant.primaryAxisSizingMode = "FIXED"
+  ticketVariant.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }]
+
+  // Create Rectangle
+
+  statusColorRect.resize(12, 200)
+  statusColorRect.fills = [{ type: 'SOLID', color: statusColor }]
+  statusColorRect.layoutAlign = "STRETCH"
+  statusColorRect.layoutGrow = 0
+  statusColorRect.topLeftRadius = 16
+  statusColorRect.bottomLeftRadius = 16
+  statusColorRect.name = "Status Color Indicator"
+
+  // Create the main frame
+  let padding = 24
+  idFrame.paddingTop = padding
+  idFrame.paddingRight = padding
+  idFrame.paddingBottom = padding
+  idFrame.paddingLeft = padding
+  idFrame.name = "Container"
+  idFrame.layoutMode = "VERTICAL"
+  idFrame.counterAxisSizingMode = "AUTO"
+  idFrame.layoutAlign = "STRETCH"
+  idFrame.layoutGrow = 1
+  idFrame.itemSpacing = 8
+  idFrame.fills = []
+
+  // Create the title frame
+  titleFrame.name = "Container"
+  titleFrame.layoutMode = "VERTICAL"
+  titleFrame.counterAxisSizingMode = "AUTO"
+  titleFrame.layoutAlign = "STRETCH"
+  titleFrame.itemSpacing = 16
+  titleFrame.fills = []
+
+  // Create the details frame
+  detailsFrame.name = "Container"
+  detailsFrame.layoutMode = "HORIZONTAL"
+  detailsFrame.counterAxisSizingMode = "AUTO"
+  detailsFrame.layoutAlign = "STRETCH"
+  detailsFrame.itemSpacing = 8
+  detailsFrame.fills = []
+
+  // Create the description frame
+  descriptionFrame.name = "Container"
+  descriptionFrame.layoutMode = "HORIZONTAL"
+  descriptionFrame.counterAxisSizingMode = "AUTO"
+  descriptionFrame.layoutAlign = "STRETCH"
+  descriptionFrame.itemSpacing = 32
+  descriptionFrame.cornerRadius = 8
+  descriptionFrame.verticalPadding = 16
+  descriptionFrame.horizontalPadding = 16
+  descriptionFrame.fills = [{ type: 'SOLID', color: hexToRgb('f4f5f7') }]
+
+
+  // Add the ticket text fields
+  titleTxt.fontName = await tryLoadingFont(FONT_PRIMARY)
+  titleTxt.fontSize = FONT_SIZE_PRIMARY
+  titleTxt.fills = FONT_COLOR_PRIMARY
+  titleTxt.textDecoration = "UNDERLINE"
+  titleTxt.autoRename = false
+  titleTxt.characters = "Ticket title"
+  titleTxt.name = ISSUE_TITLE_NAME
+
+  issueIdTxt.fontName = await tryLoadingFont(FONT_SECONDARY)
+  issueIdTxt.fontSize = FONT_SIZE_SECONDARY
+  issueIdTxt.fills = FONT_COLOR_SECONDARY
+  issueIdTxt.autoRename = false
+  issueIdTxt.characters = "ID-1"
+  issueIdTxt.name = ISSUE_ID_NAME
+
+  statusTxt.fontName = await tryLoadingFont(FONT_SECONDARY)
+  statusTxt.fontSize = FONT_SIZE_SECONDARY
+  statusTxt.fills = FONT_COLOR_SECONDARY
+  statusTxt.autoRename = false
+  statusTxt.characters = statusName.replace('Status=', '')
+  statusTxt.name = STATUS_NAME
+
+  changeDateTxt.fontSize = FONT_SIZE_SECONDARY
+  changeDateTxt.fills = FONT_COLOR_SECONDARY
+  changeDateTxt.autoRename = false
+  changeDateTxt.characters = "MM DD YYYY"
+  changeDateTxt.name = ISSUE_CHANGE_DATE_NAME
+
+
+  assigneeTxt.fontSize = FONT_SIZE_SECONDARY
+  assigneeTxt.fills = FONT_COLOR_SECONDARY
+  assigneeTxt.autoRename = false
+  assigneeTxt.characters = "Name of assignee"
+  assigneeTxt.name = ASSIGNEE_NAME
+
+
+  dividerTxt1.fontSize = FONT_SIZE_SECONDARY
+  dividerTxt1.fills = FONT_COLOR_SECONDARY
+  dividerTxt1.autoRename = false
+  dividerTxt1.characters = "/"
+  dividerTxt1.name = "/"
+
+  dividerTxt2.fontSize = FONT_SIZE_SECONDARY
+  dividerTxt2.fills = FONT_COLOR_SECONDARY
+  dividerTxt2.autoRename = false
+  dividerTxt2.characters = "/"
+  dividerTxt2.name = "/"
+
+  descriptionTxt.fontName = await tryLoadingFont(FONT_DESCRIPTION)
+  descriptionTxt.fontSize = 16
+  descriptionTxt.fills = FONT_COLOR_PRIMARY
+  descriptionTxt.autoRename = false
+  descriptionTxt.characters = "Description"
+  descriptionTxt.name = DESCRIPTION_NAME
+  descriptionTxt.layoutGrow = 1
+
   titleTxt.layoutAlign = "STRETCH"
 
   // Fixes a weird bug in which the 'stretch' doesnt work properly
@@ -716,7 +747,7 @@ async function createTicketVariant(statusColor: { r: any, g: any, b: any }, stat
   descriptionFrame.primaryAxisSizingMode = "FIXED"
   descriptionFrame.layoutAlign = "STRETCH"
 
-
+  ticketVariant.visible = true
   return ticketVariant
 }
 /**
@@ -897,16 +928,17 @@ function createErrorDataJSON(message, issueId) {
 }
 
 async function tryLoadingFont(fontName: FontName) {
-  var font: FontName = FONT_DEFAULT
+  var loadedFont: FontName = FONT_DEFAULT
   await figma.loadFontAsync(fontName)
     .then(() => {
-      font = fontName
+      loadedFont = fontName
     })
     .catch(() => {
       console.log("Font '" + fontName.family + "' could not be loaded. Please install or change the component font.")
-      font = FONT_DEFAULT
+      UNLOADED_FONTS.add(fontName.family)
+      loadedFont = FONT_DEFAULT
     })
-  return font
+  return loadedFont
 }
 
 // Formats a hex value to RGB

@@ -51,7 +51,7 @@ export function App() {
 
   window.onmessage = async (event) => {
 
-    // Fetches tickeet data and sends it to sandbox
+    // Fetches ticket data and sends it to sandbox
     if (event.data.pluginMessage.type === 'getTicketData') {
       var issueIds = event.data.pluginMessage.issueIds
       var nodeIds = event.data.pluginMessage.nodeIds
@@ -157,7 +157,7 @@ export function App() {
     // else if (key === COMPANY_NAME_KEY) setCompanyName(value)
     // else if (key === USERNAME_KEY) setUsername(value)
     // else if (key === PASSWORD_KEY) setPassword(value)
-    parent.postMessage({ pluginMessage: { type: 'authorization-detail-changed', key: key, data: value, save_public: false } }, '*')
+    parent.postMessage({ pluginMessage: { type: 'authorization-detail-changed', key: key, data: value, save_public: true } }, '*')
   }
 
   // Saves the authorization details in the sandbox
