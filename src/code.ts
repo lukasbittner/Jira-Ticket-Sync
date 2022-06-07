@@ -88,10 +88,10 @@ const VARIANT_COLOR_DEFAULT = hexToRgb("5E6C84");
 const VARIANT_NAME_1 = "To Do";
 const VARIANT_COLOR_1 = hexToRgb("5E6C84");
 
-const VARIANT_NAME_2 = "In Progress";
+const VARIANT_NAME_2 = "In progress";
 const VARIANT_COLOR_2 = hexToRgb("0065FF");
 
-const VARIANT_NAME_3 = "In Review";
+const VARIANT_NAME_3 = "In QA";
 const VARIANT_COLOR_3 = hexToRgb("00A3BF");
 
 const VARIANT_NAME_4 = "Dev Ready";
@@ -765,6 +765,8 @@ async function createTicketVariant(
   const assigneeTxt = figma.createText();
   const dividerTxt1 = figma.createText();
   const dividerTxt2 = figma.createText();
+  const descriptionTitleTxt = figma.createText();
+  const acceptanceTitleTxt = figma.createText();
   const descriptionTxt = figma.createText();
   const acceptanceTxt = figma.createText();
 
@@ -775,7 +777,9 @@ async function createTicketVariant(
   titleFrame.appendChild(titleTxt);
   titleFrame.appendChild(detailsFrame);
   titleFrame.appendChild(descriptionFrame);
+  descriptionFrame.appendChild(descriptionTitleTxt);
   descriptionFrame.appendChild(descriptionTxt);
+  descriptionFrame.appendChild(acceptanceTitleTxt);
   descriptionFrame.appendChild(acceptanceTxt);
   detailsFrame.appendChild(statusTxt);
   detailsFrame.appendChild(dividerTxt1);
@@ -809,7 +813,7 @@ async function createTicketVariant(
   idFrame.paddingRight = padding;
   idFrame.paddingBottom = padding;
   idFrame.paddingLeft = padding;
-  idFrame.name = "Container";
+  idFrame.name = "Ticket Body";
   idFrame.layoutMode = "VERTICAL";
   idFrame.counterAxisSizingMode = "AUTO";
   idFrame.layoutAlign = "STRETCH";
@@ -818,7 +822,7 @@ async function createTicketVariant(
   idFrame.fills = [];
 
   // Create the title frame
-  titleFrame.name = "Container";
+  titleFrame.name = "Ticket Contents";
   titleFrame.layoutMode = "VERTICAL";
   titleFrame.counterAxisSizingMode = "AUTO";
   titleFrame.layoutAlign = "STRETCH";
@@ -835,8 +839,8 @@ async function createTicketVariant(
 
   // Create the description frame
   descriptionFrame.name = "Description";
-  descriptionFrame.layoutMode = "HORIZONTAL";
-  descriptionFrame.counterAxisSizingMode = "AUTO";
+  descriptionFrame.layoutMode = "VERTICAL";
+  descriptionFrame.primaryAxisSizingMode = "AUTO";
   descriptionFrame.layoutAlign = "STRETCH";
   descriptionFrame.itemSpacing = 32;
   descriptionFrame.cornerRadius = 8;
@@ -891,13 +895,26 @@ async function createTicketVariant(
   dividerTxt2.characters = "/";
   dividerTxt2.name = "/";
 
+  acceptanceTitleTxt.fontName = await tryLoadingFont(FONT_PRIMARY);
+  acceptanceTitleTxt.fontSize = 16;
+  acceptanceTitleTxt.fills = FONT_COLOR_PRIMARY;
+  acceptanceTitleTxt.autoRename = false;
+  acceptanceTitleTxt.characters = "Acceptance Criteria";
+  acceptanceTitleTxt.name = "Title";
+
   acceptanceTxt.fontName = await tryLoadingFont(FONT_DESCRIPTION);
   acceptanceTxt.fontSize = 16;
   acceptanceTxt.fills = FONT_COLOR_PRIMARY;
   acceptanceTxt.autoRename = false;
   acceptanceTxt.characters = "Description";
   acceptanceTxt.name = ACCEPTANCE_NAME;
-  acceptanceTxt.layoutGrow = 1;
+
+  descriptionTitleTxt.fontName = await tryLoadingFont(FONT_PRIMARY);
+  descriptionTitleTxt.fontSize = 16;
+  descriptionTitleTxt.fills = FONT_COLOR_PRIMARY;
+  descriptionTitleTxt.autoRename = false;
+  descriptionTitleTxt.characters = "Description";
+  descriptionTitleTxt.name = "Title";
 
   descriptionTxt.fontName = await tryLoadingFont(FONT_DESCRIPTION);
   descriptionTxt.fontSize = 16;
@@ -905,16 +922,16 @@ async function createTicketVariant(
   descriptionTxt.autoRename = false;
   descriptionTxt.characters = "Description";
   descriptionTxt.name = DESCRIPTION_NAME;
-  descriptionTxt.layoutGrow = 1;
 
+  acceptanceTxt.layoutAlign = "STRETCH";
+  descriptionTxt.layoutAlign = "STRETCH";
   titleTxt.layoutAlign = "STRETCH";
 
   // Fixes a weird bug in which the 'stretch' doesnt work properly
-  idFrame.primaryAxisSizingMode = "FIXED";
+  idFrame.primaryAxisSizingMode = "AUTO";
   idFrame.layoutAlign = "STRETCH";
   detailsFrame.primaryAxisSizingMode = "FIXED";
   detailsFrame.layoutAlign = "STRETCH";
-  descriptionFrame.primaryAxisSizingMode = "FIXED";
   descriptionFrame.layoutAlign = "STRETCH";
 
   ticketVariant.visible = true;
