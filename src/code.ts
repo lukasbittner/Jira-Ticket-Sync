@@ -56,6 +56,9 @@ function getAssignee(data) {
 function getDescription(data) {
   return data.fields?.description || "No description";
 }
+function getAcceptanceCriteria(data) {
+  return data.fields?.customfield_10103 || "No acceptance criteria";
+}
 function getChangeDate(data) {
   let date = data.fields?.statuscategorychangedate;
   if (!date) data.fields?.created || "No date";
@@ -73,6 +76,7 @@ const ISSUE_TITLE_NAME = "Ticket Title";
 const ISSUE_CHANGE_DATE_NAME = "Date of Status Change";
 const ASSIGNEE_NAME = "Assignee";
 const DESCRIPTION_NAME = "Description";
+const ACCEPTANCE_NAME = "Acceptance Criteria";
 const STATUS_NAME = "Status";
 
 const COMPONENT_SET_NAME = "Jira Ticket Header";
@@ -480,9 +484,20 @@ async function updateTickets(
     ) as TextNode;
     if (statusNode) {
       statusNode.fontName = await tryLoadingFont(
-        assigneeNode.fontName as FontName
+        statusNode.fontName as FontName
       );
       statusNode.characters = getStatus(ticketData);
+    }
+
+    //Update acceptance criteria
+    let acceptanceNode = ticketInstance.findOne(
+      (n) => n.type === "TEXT" && n.name === ACCEPTANCE_NAME
+    ) as TextNode;
+    if (acceptanceNode) {
+      acceptanceNode.fontName = await tryLoadingFont(
+        acceptanceNode.fontName as FontName
+      );
+      acceptanceNode.characters = getAcceptanceCriteria(ticketData);
     }
 
     // Update description
@@ -751,6 +766,7 @@ async function createTicketVariant(
   const dividerTxt1 = figma.createText();
   const dividerTxt2 = figma.createText();
   const descriptionTxt = figma.createText();
+  const acceptanceTxt = figma.createText();
 
   ticketVariant.appendChild(statusColorRect);
   ticketVariant.appendChild(idFrame);
@@ -760,6 +776,7 @@ async function createTicketVariant(
   titleFrame.appendChild(detailsFrame);
   titleFrame.appendChild(descriptionFrame);
   descriptionFrame.appendChild(descriptionTxt);
+  descriptionFrame.appendChild(acceptanceTxt);
   detailsFrame.appendChild(statusTxt);
   detailsFrame.appendChild(dividerTxt1);
   detailsFrame.appendChild(assigneeTxt);
@@ -817,7 +834,7 @@ async function createTicketVariant(
   detailsFrame.fills = [];
 
   // Create the description frame
-  descriptionFrame.name = "Container";
+  descriptionFrame.name = "Description";
   descriptionFrame.layoutMode = "HORIZONTAL";
   descriptionFrame.counterAxisSizingMode = "AUTO";
   descriptionFrame.layoutAlign = "STRETCH";
@@ -873,6 +890,14 @@ async function createTicketVariant(
   dividerTxt2.autoRename = false;
   dividerTxt2.characters = "/";
   dividerTxt2.name = "/";
+
+  acceptanceTxt.fontName = await tryLoadingFont(FONT_DESCRIPTION);
+  acceptanceTxt.fontSize = 16;
+  acceptanceTxt.fills = FONT_COLOR_PRIMARY;
+  acceptanceTxt.autoRename = false;
+  acceptanceTxt.characters = "Description";
+  acceptanceTxt.name = ACCEPTANCE_NAME;
+  acceptanceTxt.layoutGrow = 1;
 
   descriptionTxt.fontName = await tryLoadingFont(FONT_DESCRIPTION);
   descriptionTxt.fontSize = 16;
