@@ -162,7 +162,9 @@ export function App() {
 
   // Saves the authorization details in the sandbox
   const onSaveAuthDetails = () => {
-    var companyName = companyNameInput.current.value
+    var companyName = companyNameInput.current.value.replace("https://", "")
+    if(companyName.slice(-1) == "/") companyName = companyName.slice(0, -1)
+    console.log(companyName)
     var projectId = projectIdInput.current.value
     var username = usernameInput.current.value
     var password = passwordInput.current.value
@@ -174,10 +176,10 @@ export function App() {
 
     var allCredentialsProvided = true
     if (companyName === "") {
-      setCompanyNameError("Please enter a company name.")
+      setCompanyNameError("Please enter a domain name.")
       allCredentialsProvided = false
-    } else if (companyName != encodeURIComponent(companyName)){
-      setCompanyNameError("Please enter the name that appears in your Jira URL before '.atlassian.net'.")
+    } else if (companyName != encodeURI(companyName)){
+      setCompanyNameError("Incorrect URL. Please use the same format as shown in the examples.")
       allCredentialsProvided = false
     }
 
@@ -331,7 +333,7 @@ export function App() {
               {companyNameError.length > 0 &&
                 <Text className="error-text">{companyNameError}</Text>
               }
-              <div className='type black3'><b>company-name</b>.atlassian.net <br/> or jira.<b>company-name</b>.io</div>
+              <div className='type black3'>company-name.atlassian.net <br/> or jira.company-name.io</div>
             </div>
           </div>
           <div className='row'>

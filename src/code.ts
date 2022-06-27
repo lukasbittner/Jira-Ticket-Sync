@@ -1,3 +1,5 @@
+import { stringify } from "querystring"
+
 const DOCUMENT_NODE = figma.currentPage.parent
 
 // Set the relaunch button for the whole document
@@ -45,6 +47,7 @@ function getStatus(data) { return data.fields?.status?.name }
 function getTitle(data) { return data.fields?.summary || "ERROR: No summary existing." }
 function getIssueId(data) { return data.key }
 function getAssignee(data) { return data.fields?.assignee?.displayName || "Not assigned" }
+function getLabels(data) { return data.fields?.labels.join(", ") }
 function getDescription(data) { return data.fields?.description || "No description" }
 function getChangeDate(data) {
   let date = data.fields?.statuscategorychangedate
@@ -64,6 +67,7 @@ const ISSUE_ID_NAME = "Ticket ID"
 const ISSUE_TITLE_NAME = "Ticket Title"
 const ISSUE_CHANGE_DATE_NAME = "Date of Status Change"
 const ASSIGNEE_NAME = "Assignee"
+const LABELS_NAME = "Labels"
 const DESCRIPTION_NAME = "Description"
 const STATUS_NAME = "Status"
 
@@ -396,6 +400,19 @@ async function updateTickets(ticketInstances: Array<InstanceNode>, msg, isCreate
       numberOfMissingAssignees += 1
     }
 
+    // Update labels
+    let labelsNode = ticketInstance.findOne(n => n.type === "TEXT" && n.name === LABELS_NAME) as TextNode
+    let labelsComponentNode = newVariant.findOne(n => n.type === "TEXT" && n.name === LABELS_NAME) as TextNode
+    if (labelsNode && labelsComponentNode.visible == true) {
+      labelsNode.fontName = await tryLoadingFont(labelsNode.fontName as FontName)
+      if(getLabels(ticketData) != ""){
+        labelsNode.visible = true
+        labelsNode.characters = getLabels(ticketData)
+      } else {
+        labelsNode.visible = false
+      }
+    }
+
     // Update status text field
     let statusNode = ticketInstance.findOne(n => n.type === "TEXT" && n.name === STATUS_NAME) as TextNode
     if (statusNode) {
@@ -596,6 +613,7 @@ async function createTicketVariant(statusColor: { r: any, g: any, b: any }, stat
   const statusTxt = figma.createText()
   const changeDateTxt = figma.createText()
   const assigneeTxt = figma.createText()
+  const labelsTxt = figma.createText()
   const dividerTxt1 = figma.createText()
   const dividerTxt2 = figma.createText()
   const descriptionTxt = figma.createText()
@@ -607,6 +625,7 @@ async function createTicketVariant(statusColor: { r: any, g: any, b: any }, stat
   idFrame.appendChild(titleFrame)
   titleFrame.appendChild(titleTxt)
   titleFrame.appendChild(detailsFrame)
+  titleFrame.appendChild(labelsTxt)
   titleFrame.appendChild(descriptionFrame)
   descriptionFrame.appendChild(descriptionTxt)
   detailsFrame.appendChild(statusTxt)
@@ -629,7 +648,6 @@ async function createTicketVariant(statusColor: { r: any, g: any, b: any }, stat
   ticketVariant.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }]
 
   // Create Rectangle
-
   statusColorRect.resize(12, 200)
   statusColorRect.fills = [{ type: 'SOLID', color: statusColor }]
   statusColorRect.layoutAlign = "STRETCH"
@@ -716,6 +734,12 @@ async function createTicketVariant(statusColor: { r: any, g: any, b: any }, stat
   assigneeTxt.characters = "Name of assignee"
   assigneeTxt.name = ASSIGNEE_NAME
 
+  labelsTxt.fontSize = FONT_SIZE_SECONDARY
+  labelsTxt.fills = FONT_COLOR_PRIMARY
+  labelsTxt.autoRename = false
+  labelsTxt.characters = "Labels"
+  labelsTxt.name = LABELS_NAME
+  labelsTxt.visible = false
 
   dividerTxt1.fontSize = FONT_SIZE_SECONDARY
   dividerTxt1.fills = FONT_COLOR_SECONDARY
